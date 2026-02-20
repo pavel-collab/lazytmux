@@ -10,6 +10,33 @@ import (
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	// Handle config editor mode
+	if m.configEditorActive {
+		switch msg := msg.(type) {
+		case ExitConfigEditorMsg:
+			m.configEditorActive = false
+			return m, RefreshCmd(m.client)
+		case ConfigSavedMsg:
+			if msg.Err == nil {
+				m.statusMessage = "Configuration saved"
+			} else {
+				m.lastError = msg.Err
+			}
+			var cmd tea.Cmd
+			m.configEditor, cmd = m.configEditor.Update(msg)
+			return m, cmd
+		case tea.WindowSizeMsg:
+			m.width = msg.Width
+			m.height = msg.Height
+			m.configEditor.SetSize(msg.Width, msg.Height)
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.configEditor, cmd = m.configEditor.Update(msg)
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Handle dialog input first
@@ -210,6 +237,11 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, SplitWindowHorizontalCmd(m.client, m.tmuxState.CurrentSession.Name, window.Index)
 		}
 		return m, nil
+
+	case key.Matches(msg, m.keyMap.OpenConfig):
+		m.configEditorActive = true
+		m.configEditor.SetSize(m.width, m.height)
+		return m, m.configEditor.Init()
 	}
 
 	return m, nil

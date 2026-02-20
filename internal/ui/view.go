@@ -15,6 +15,11 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// Handle config editor mode
+	if m.configEditorActive {
+		return m.configEditor.View()
+	}
+
 	// Handle dialogs
 	if m.activeDialog != NoDialog {
 		return m.renderWithDialog()
@@ -392,7 +397,7 @@ func (m Model) renderHelp() string {
 	if m.showHelp {
 		return m.help.View(m.keyMap)
 	}
-	return m.styles.HelpText.Render("j/k: navigate • Tab: switch panel • n: new • d: delete • v/s: split • a: attach • q: quit • ?: help")
+	return m.styles.HelpText.Render("j/k: navigate • Tab: switch panel • n: new • d: delete • v/s: split • c: config • a: attach • q: quit • ?: help")
 }
 
 func (m Model) renderWithDialog() string {
