@@ -25,24 +25,48 @@ func (m Model) View() string {
 
 func (m Model) renderMainView() string {
 	// Calculate panel dimensions
+	// Layout: Left column (1/3) | Right column (2/3)
 	availableWidth := m.width - 4 // borders
-	sessionsWidth := availableWidth * 35 / 100
-	windowsWidth := availableWidth * 35 / 100
-	infoWidth := availableWidth - sessionsWidth - windowsWidth
+	leftColumnWidth := availableWidth / 3
+	rightColumnWidth := availableWidth - leftColumnWidth
 
 	panelHeight := m.height - 4 // status bar + help
 
-	// Render panels
-	sessionsPanel := m.renderSessionsPanel(sessionsWidth, panelHeight)
-	windowsPanel := m.renderWindowsPanel(windowsWidth, panelHeight)
-	infoPanel := m.renderInfoPanel(infoWidth, panelHeight)
+	// Left column: Sessions (1/2) and Windows (1/2) stacked vertically
+	sessionsHeight := panelHeight / 2
+	windowsHeight := panelHeight - sessionsHeight
 
-	// Join panels horizontally
-	mainContent := lipgloss.JoinHorizontal(
-		lipgloss.Top,
+	// Right column: Info (3/4) and Logs (1/4) stacked vertically
+	infoHeight := panelHeight * 3 / 4
+	logsHeight := panelHeight - infoHeight
+
+	// Render left column panels
+	sessionsPanel := m.renderSessionsPanel(leftColumnWidth, sessionsHeight)
+	windowsPanel := m.renderWindowsPanel(leftColumnWidth, windowsHeight)
+
+	// Stack left column vertically
+	leftColumn := lipgloss.JoinVertical(
+		lipgloss.Left,
 		sessionsPanel,
 		windowsPanel,
+	)
+
+	// Render right column panels
+	infoPanel := m.renderInfoPanel(rightColumnWidth, infoHeight)
+	logsPanel := m.renderLogsPanel(rightColumnWidth, logsHeight)
+
+	// Stack right column vertically
+	rightColumn := lipgloss.JoinVertical(
+		lipgloss.Left,
 		infoPanel,
+		logsPanel,
+	)
+
+	// Join columns horizontally
+	mainContent := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftColumn,
+		rightColumn,
 	)
 
 	// Render status bar
@@ -178,6 +202,21 @@ func (m Model) renderInfoPanel(width, height int) string {
 		Render(innerContent)
 }
 
+func (m Model) renderLogsPanel(width, height int) string {
+	style := m.styles.UnfocusedPanel
+
+	title := m.styles.Title.Render("Logs")
+
+	content := m.styles.DimText.Render("Logs will be displayed here...")
+
+	innerContent := lipgloss.JoinVertical(lipgloss.Left, title, content)
+
+	return style.
+		Width(width).
+		Height(height).
+		Render(innerContent)
+}
+
 func (m Model) renderStatusBar() string {
 	var msg string
 	if m.lastError != nil {
@@ -203,10 +242,7 @@ func (m Model) renderHelp() string {
 }
 
 func (m Model) renderWithDialog() string {
-	// Render main view dimmed
-	mainView := m.renderMainView()
-
-	// Render dialog
+	// Render dialog content
 	var dialogContent string
 
 	switch m.activeDialog {
@@ -234,46 +270,15 @@ func (m Model) renderWithDialog() string {
 
 	dialog := m.styles.Dialog.Render(dialogContent)
 
-	// Center the dialog
-	dialogWidth := lipgloss.Width(dialog)
-	dialogHeight := lipgloss.Height(dialog)
-
-	x := (m.width - dialogWidth) / 2
-	y := (m.height - dialogHeight) / 2
-
-	// Overlay dialog on main view
-	return placeOverlay(x, y, dialog, mainView)
+	// Use lipgloss.Place to properly center the dialog
+	// This avoids ANSI escape code issues that cause visual artifacts
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		dialog,
+		lipgloss.WithWhitespaceChars(" "),
+	)
 }
 
-// placeOverlay places an overlay on top of a background at the given position
-func placeOverlay(x, y int, overlay, background string) string {
-	bgLines := strings.Split(background, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	for i, line := range overlayLines {
-		bgY := y + i
-		if bgY < 0 || bgY >= len(bgLines) {
-			continue
-		}
-
-		bgLine := bgLines[bgY]
-		bgRunes := []rune(bgLine)
-
-		// Pad background line if needed
-		for len(bgRunes) < x+len([]rune(line)) {
-			bgRunes = append(bgRunes, ' ')
-		}
-
-		// Replace portion of background with overlay
-		overlayRunes := []rune(line)
-		for j, r := range overlayRunes {
-			if x+j >= 0 && x+j < len(bgRunes) {
-				bgRunes[x+j] = r
-			}
-		}
-
-		bgLines[bgY] = string(bgRunes)
-	}
-
-	return strings.Join(bgLines, "\n")
-}
