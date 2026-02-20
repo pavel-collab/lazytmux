@@ -188,7 +188,13 @@ func (m Model) renderInfoPanel(width, height int) string {
 		content.WriteString(fmt.Sprintf("Panes: %d\n", w.Panes))
 		content.WriteString(fmt.Sprintf("Active: %v\n", w.Active))
 		if m.tmuxState.CurrentSession != nil {
-			content.WriteString(fmt.Sprintf("Session: %s", m.tmuxState.CurrentSession.Name))
+			content.WriteString(fmt.Sprintf("Session: %s\n", m.tmuxState.CurrentSession.Name))
+		}
+		// Draw pane layout sketch
+		if len(m.currentPanes) > 0 {
+			content.WriteString("\nLayout:\n")
+			sketch := m.renderPaneSketch(width-6, 10) // account for padding/borders
+			content.WriteString(sketch)
 		}
 	} else {
 		content.WriteString(m.styles.DimText.Render("Select an item"))
@@ -200,6 +206,154 @@ func (m Model) renderInfoPanel(width, height int) string {
 		Width(width).
 		Height(height).
 		Render(innerContent)
+}
+
+// renderPaneSketch draws an ASCII art representation of the pane layout
+func (m Model) renderPaneSketch(sketchWidth, sketchHeight int) string {
+	if len(m.currentPanes) == 0 {
+		return ""
+	}
+
+	// Find total window dimensions from panes
+	var totalWidth, totalHeight int
+	for _, p := range m.currentPanes {
+		right := p.Left + p.Width
+		bottom := p.Top + p.Height
+		if right > totalWidth {
+			totalWidth = right
+		}
+		if bottom > totalHeight {
+			totalHeight = bottom
+		}
+	}
+
+	if totalWidth == 0 || totalHeight == 0 {
+		return ""
+	}
+
+	// Ensure minimum sketch size
+	if sketchWidth < 10 {
+		sketchWidth = 10
+	}
+	if sketchHeight < 5 {
+		sketchHeight = 5
+	}
+
+	// Create grid for the sketch
+	grid := make([][]rune, sketchHeight)
+	for i := range grid {
+		grid[i] = make([]rune, sketchWidth)
+		for j := range grid[i] {
+			grid[i][j] = ' '
+		}
+	}
+
+	// Draw each pane
+	for _, pane := range m.currentPanes {
+		// Normalize coordinates to sketch size
+		x1 := pane.Left * (sketchWidth - 1) / totalWidth
+		y1 := pane.Top * (sketchHeight - 1) / totalHeight
+		x2 := (pane.Left + pane.Width) * (sketchWidth - 1) / totalWidth
+		y2 := (pane.Top + pane.Height) * (sketchHeight - 1) / totalHeight
+
+		// Ensure minimum size
+		if x2 <= x1 {
+			x2 = x1 + 1
+		}
+		if y2 <= y1 {
+			y2 = y1 + 1
+		}
+
+		// Clamp to grid bounds
+		if x2 >= sketchWidth {
+			x2 = sketchWidth - 1
+		}
+		if y2 >= sketchHeight {
+			y2 = sketchHeight - 1
+		}
+
+		// Draw borders
+		for x := x1; x <= x2; x++ {
+			if y1 < sketchHeight {
+				grid[y1][x] = '─'
+			}
+			if y2 < sketchHeight {
+				grid[y2][x] = '─'
+			}
+		}
+		for y := y1; y <= y2; y++ {
+			if x1 < sketchWidth {
+				grid[y][x1] = '│'
+			}
+			if x2 < sketchWidth {
+				grid[y][x2] = '│'
+			}
+		}
+
+		// Draw corners
+		if y1 < sketchHeight && x1 < sketchWidth {
+			grid[y1][x1] = '┌'
+		}
+		if y1 < sketchHeight && x2 < sketchWidth {
+			grid[y1][x2] = '┐'
+		}
+		if y2 < sketchHeight && x1 < sketchWidth {
+			grid[y2][x1] = '└'
+		}
+		if y2 < sketchHeight && x2 < sketchWidth {
+			grid[y2][x2] = '┘'
+		}
+
+		// Draw pane index in the center
+		centerX := (x1 + x2) / 2
+		centerY := (y1 + y2) / 2
+		if centerY > y1 && centerY < y2 && centerX > x1 && centerX < x2 {
+			label := fmt.Sprintf("%d", pane.Index)
+			if pane.Active {
+				label = "*" + label
+			}
+			for i, ch := range label {
+				if centerX+i < x2 && centerX+i < sketchWidth {
+					grid[centerY][centerX+i] = ch
+				}
+			}
+		}
+	}
+
+	// Fix intersections (where pane borders meet)
+	for y := 0; y < sketchHeight; y++ {
+		for x := 0; x < sketchWidth; x++ {
+			// Check for intersection points and fix them
+			hasTop := y > 0 && (grid[y-1][x] == '│' || grid[y-1][x] == '┌' || grid[y-1][x] == '┐' || grid[y-1][x] == '├' || grid[y-1][x] == '┤' || grid[y-1][x] == '┬' || grid[y-1][x] == '┼')
+			hasBottom := y < sketchHeight-1 && (grid[y+1][x] == '│' || grid[y+1][x] == '└' || grid[y+1][x] == '┘' || grid[y+1][x] == '├' || grid[y+1][x] == '┤' || grid[y+1][x] == '┴' || grid[y+1][x] == '┼')
+			hasLeft := x > 0 && (grid[y][x-1] == '─' || grid[y][x-1] == '┌' || grid[y][x-1] == '└' || grid[y][x-1] == '┬' || grid[y][x-1] == '┴' || grid[y][x-1] == '├' || grid[y][x-1] == '┼')
+			hasRight := x < sketchWidth-1 && (grid[y][x+1] == '─' || grid[y][x+1] == '┐' || grid[y][x+1] == '┘' || grid[y][x+1] == '┬' || grid[y][x+1] == '┴' || grid[y][x+1] == '┤' || grid[y][x+1] == '┼')
+
+			current := grid[y][x]
+			if current == '┌' || current == '┐' || current == '└' || current == '┘' || current == '─' || current == '│' {
+				if hasTop && hasBottom && hasLeft && hasRight {
+					grid[y][x] = '┼'
+				} else if hasTop && hasBottom && hasRight {
+					grid[y][x] = '├'
+				} else if hasTop && hasBottom && hasLeft {
+					grid[y][x] = '┤'
+				} else if hasLeft && hasRight && hasBottom {
+					grid[y][x] = '┬'
+				} else if hasLeft && hasRight && hasTop {
+					grid[y][x] = '┴'
+				}
+			}
+		}
+	}
+
+	// Convert grid to string
+	var result strings.Builder
+	for _, row := range grid {
+		result.WriteString(string(row))
+		result.WriteString("\n")
+	}
+
+	return result.String()
 }
 
 func (m Model) renderLogsPanel(width, height int) string {
@@ -238,7 +392,7 @@ func (m Model) renderHelp() string {
 	if m.showHelp {
 		return m.help.View(m.keyMap)
 	}
-	return m.styles.HelpText.Render("j/k: navigate • Tab: switch panel • n: new • d: delete • a: attach • q: quit • ?: help")
+	return m.styles.HelpText.Render("j/k: navigate • Tab: switch panel • n: new • d: delete • v/s: split • a: attach • q: quit • ?: help")
 }
 
 func (m Model) renderWithDialog() string {

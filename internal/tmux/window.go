@@ -42,3 +42,28 @@ func (c *Client) RenameWindow(sessionName string, windowIndex int, newName strin
 	_, err := c.Execute("rename-window", "-t", target, newName)
 	return err
 }
+
+// SplitWindowVertical splits the window vertically (side by side)
+func (c *Client) SplitWindowVertical(sessionName string, windowIndex int) error {
+	target := fmt.Sprintf("%s:%d", sessionName, windowIndex)
+	_, err := c.Execute("split-window", "-h", "-t", target)
+	return err
+}
+
+// SplitWindowHorizontal splits the window horizontally (stacked)
+func (c *Client) SplitWindowHorizontal(sessionName string, windowIndex int) error {
+	target := fmt.Sprintf("%s:%d", sessionName, windowIndex)
+	_, err := c.Execute("split-window", "-v", "-t", target)
+	return err
+}
+
+// ListPanes returns panes for a window with their layout information
+func (c *Client) ListPanes(sessionName string, windowIndex int) ([]Pane, error) {
+	target := fmt.Sprintf("%s:%d", sessionName, windowIndex)
+	format := "#{pane_id}:#{pane_index}:#{pane_width}:#{pane_height}:#{pane_left}:#{pane_top}:#{pane_active}"
+	output, err := c.Execute("list-panes", "-t", target, "-F", format)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePanes(output)
+}

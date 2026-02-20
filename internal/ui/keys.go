@@ -13,14 +13,16 @@ type KeyMap struct {
 	ShiftTab key.Binding
 
 	// Actions
-	Enter   key.Binding
-	Select  key.Binding
-	Create  key.Binding
-	Delete  key.Binding
-	Rename  key.Binding
-	Refresh key.Binding
-	Attach  key.Binding
-	Detach  key.Binding
+	Enter           key.Binding
+	Select          key.Binding
+	Create          key.Binding
+	Delete          key.Binding
+	Rename          key.Binding
+	Refresh         key.Binding
+	Attach          key.Binding
+	Detach          key.Binding
+	SplitVertical   key.Binding
+	SplitHorizontal key.Binding
 
 	// General
 	Help    key.Binding
@@ -88,6 +90,14 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("D"),
 			key.WithHelp("D", "detach"),
 		),
+		SplitVertical: key.NewBinding(
+			key.WithKeys("v"),
+			key.WithHelp("v", "vsplit"),
+		),
+		SplitHorizontal: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "hsplit"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -117,6 +127,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.Select, k.Create, k.Delete, k.Rename},
-		{k.Attach, k.Detach, k.Refresh, k.Help, k.Quit},
+		{k.SplitVertical, k.SplitHorizontal, k.Attach, k.Detach},
+		{k.Refresh, k.Help, k.Quit},
 	}
 }

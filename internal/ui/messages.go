@@ -65,6 +65,21 @@ type AttachMsg struct {
 	SessionName string
 }
 
+// PaneSplitMsg signals successful pane split
+type PaneSplitMsg struct {
+	SessionName string
+	WindowIndex int
+	Vertical    bool
+}
+
+// PanesLoadedMsg carries pane information for a window
+type PanesLoadedMsg struct {
+	SessionName string
+	WindowIndex int
+	Panes       []tmux.Pane
+	Err         error
+}
+
 // RefreshCmd returns a command to refresh tmux state
 func RefreshCmd(client *tmux.Client) tea.Cmd {
 	return func() tea.Msg {
@@ -172,5 +187,40 @@ func DetachCmd(client *tmux.Client) tea.Cmd {
 			return ErrorMsg{Err: err}
 		}
 		return DetachedMsg{}
+	}
+}
+
+// SplitWindowVerticalCmd splits window vertically (side by side)
+func SplitWindowVerticalCmd(client *tmux.Client, sessionName string, windowIndex int) tea.Cmd {
+	return func() tea.Msg {
+		err := client.SplitWindowVertical(sessionName, windowIndex)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return PaneSplitMsg{SessionName: sessionName, WindowIndex: windowIndex, Vertical: true}
+	}
+}
+
+// SplitWindowHorizontalCmd splits window horizontally (stacked)
+func SplitWindowHorizontalCmd(client *tmux.Client, sessionName string, windowIndex int) tea.Cmd {
+	return func() tea.Msg {
+		err := client.SplitWindowHorizontal(sessionName, windowIndex)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return PaneSplitMsg{SessionName: sessionName, WindowIndex: windowIndex, Vertical: false}
+	}
+}
+
+// LoadPanesCmd loads panes for a window
+func LoadPanesCmd(client *tmux.Client, sessionName string, windowIndex int) tea.Cmd {
+	return func() tea.Msg {
+		panes, err := client.ListPanes(sessionName, windowIndex)
+		return PanesLoadedMsg{
+			SessionName: sessionName,
+			WindowIndex: windowIndex,
+			Panes:       panes,
+			Err:         err,
+		}
 	}
 }
