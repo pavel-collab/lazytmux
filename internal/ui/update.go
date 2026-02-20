@@ -67,6 +67,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, setStatusCmd("Switched to session: "+msg.Name))
 		return m, tea.Batch(cmds...)
 
+	case WindowSwitchedMsg:
+		cmds = append(cmds, setStatusCmd("Switched to window: "+msg.WindowName))
+		return m, tea.Batch(cmds...)
+
 	case ErrorMsg:
 		m.lastError = msg.Err
 		return m, nil
@@ -143,6 +147,9 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.focusedPanel == SessionsPanel && len(m.tmuxState.Sessions) > 0 {
 			session := m.tmuxState.Sessions[m.sessionCursor]
 			return m, SwitchSessionCmd(m.client, session.Name)
+		} else if m.focusedPanel == WindowsPanel && len(m.tmuxState.Windows) > 0 && m.tmuxState.CurrentSession != nil {
+			window := m.tmuxState.Windows[m.windowCursor]
+			return m, SwitchWindowCmd(m.client, m.tmuxState.CurrentSession.Name, window.Index, window.Name)
 		}
 		return m, nil
 

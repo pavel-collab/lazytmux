@@ -38,6 +38,12 @@ type SessionSwitchedMsg struct {
 	Name string
 }
 
+// WindowSwitchedMsg signals successful window switch
+type WindowSwitchedMsg struct {
+	SessionName string
+	WindowName  string
+}
+
 // ErrorMsg carries error information
 type ErrorMsg struct {
 	Err error
@@ -141,5 +147,16 @@ func SwitchSessionCmd(client *tmux.Client, name string) tea.Cmd {
 			return ErrorMsg{Err: err}
 		}
 		return SessionSwitchedMsg{Name: name}
+	}
+}
+
+// SwitchWindowCmd switches to another window
+func SwitchWindowCmd(client *tmux.Client, sessionName string, windowIndex int, windowName string) tea.Cmd {
+	return func() tea.Msg {
+		err := client.SelectWindow(sessionName, windowIndex)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return WindowSwitchedMsg{SessionName: sessionName, WindowName: windowName}
 	}
 }
