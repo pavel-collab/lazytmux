@@ -71,6 +71,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, setStatusCmd("Switched to window: "+msg.WindowName))
 		return m, tea.Batch(cmds...)
 
+	case DetachedMsg:
+		cmds = append(cmds, setStatusCmd("Detached from session"))
+		cmds = append(cmds, RefreshCmd(m.client))
+		return m, tea.Batch(cmds...)
+
 	case ErrorMsg:
 		m.lastError = msg.Err
 		return m, nil
@@ -140,6 +145,15 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			session := m.tmuxState.Sessions[m.sessionCursor]
 			m.attachCmd = m.client.AttachSession(session.Name)
 			return m, tea.Quit
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keyMap.Detach):
+		// Check if any session is attached
+		for _, s := range m.tmuxState.Sessions {
+			if s.Attached {
+				return m, DetachCmd(m.client)
+			}
 		}
 		return m, nil
 

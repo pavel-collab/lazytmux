@@ -44,6 +44,9 @@ type WindowSwitchedMsg struct {
 	WindowName  string
 }
 
+// DetachedMsg signals successful detach from session
+type DetachedMsg struct{}
+
 // ErrorMsg carries error information
 type ErrorMsg struct {
 	Err error
@@ -158,5 +161,16 @@ func SwitchWindowCmd(client *tmux.Client, sessionName string, windowIndex int, w
 			return ErrorMsg{Err: err}
 		}
 		return WindowSwitchedMsg{SessionName: sessionName, WindowName: windowName}
+	}
+}
+
+// DetachCmd detaches the current client from its session
+func DetachCmd(client *tmux.Client) tea.Cmd {
+	return func() tea.Msg {
+		err := client.DetachClient()
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return DetachedMsg{}
 	}
 }

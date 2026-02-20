@@ -41,3 +41,9 @@ func (c *Client) SwitchClient(sessionName string) error {
 	_, err := c.Execute("switch-client", "-t", sessionName)
 	return err
 }
+
+// DetachClient detaches the current client from its session
+func (c *Client) DetachClient() error {
+	_, err := c.Execute("detach-client")
+	return err
+}

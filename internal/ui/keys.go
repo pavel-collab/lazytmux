@@ -20,6 +20,7 @@ type KeyMap struct {
 	Rename  key.Binding
 	Refresh key.Binding
 	Attach  key.Binding
+	Detach  key.Binding
 
 	// General
 	Help    key.Binding
@@ -83,6 +84,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("a"),
 			key.WithHelp("a", "attach"),
 		),
+		Detach: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "detach"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -112,6 +117,6 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.Select, k.Create, k.Delete, k.Rename},
-		{k.Refresh, k.Help, k.Quit},
+		{k.Attach, k.Detach, k.Refresh, k.Help, k.Quit},
 	}
 }
