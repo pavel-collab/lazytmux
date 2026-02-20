@@ -33,6 +33,11 @@ type WindowDeletedMsg struct {
 	WindowIndex int
 }
 
+// SessionSwitchedMsg signals successful session switch
+type SessionSwitchedMsg struct {
+	Name string
+}
+
 // ErrorMsg carries error information
 type ErrorMsg struct {
 	Err error
@@ -125,5 +130,16 @@ func DeleteWindowCmd(client *tmux.Client, sessionName string, windowIndex int) t
 			return ErrorMsg{Err: err}
 		}
 		return WindowDeletedMsg{SessionName: sessionName, WindowIndex: windowIndex}
+	}
+}
+
+// SwitchSessionCmd switches to another session
+func SwitchSessionCmd(client *tmux.Client, name string) tea.Cmd {
+	return func() tea.Msg {
+		err := client.SwitchClient(name)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return SessionSwitchedMsg{Name: name}
 	}
 }

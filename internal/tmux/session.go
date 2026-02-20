@@ -35,3 +35,9 @@ func (c *Client) RenameSession(oldName, newName string) error {
 func (c *Client) AttachSession(name string) []string {
 	return []string{c.tmuxPath, "attach-session", "-t", name}
 }
+
+// SwitchClient switches the current client to another session
+func (c *Client) SwitchClient(sessionName string) error {
+	_, err := c.Execute("switch-client", "-t", sessionName)
+	return err
+}

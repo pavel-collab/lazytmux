@@ -14,6 +14,7 @@ type KeyMap struct {
 
 	// Actions
 	Enter   key.Binding
+	Select  key.Binding
 	Create  key.Binding
 	Delete  key.Binding
 	Rename  key.Binding
@@ -58,6 +59,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("enter"),
 			key.WithHelp("enter", "select"),
 		),
+		Select: key.NewBinding(
+			key.WithKeys(" "),
+			key.WithHelp("space", "switch"),
+		),
 		Create: key.NewBinding(
 			key.WithKeys("n"),
 			key.WithHelp("n", "new"),
@@ -99,14 +104,14 @@ func DefaultKeyMap() KeyMap {
 
 // ShortHelp returns keybindings to be shown in the mini help view
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Tab, k.Create, k.Delete, k.Attach, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Tab, k.Select, k.Create, k.Delete, k.Quit}
 }
 
 // FullHelp returns keybindings for the expanded help view
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Left, k.Right},
-		{k.Create, k.Delete, k.Rename, k.Attach},
+		{k.Select, k.Create, k.Delete, k.Rename},
 		{k.Refresh, k.Help, k.Quit},
 	}
 }
