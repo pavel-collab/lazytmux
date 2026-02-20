@@ -242,10 +242,7 @@ func (m Model) renderHelp() string {
 }
 
 func (m Model) renderWithDialog() string {
-	// Render main view dimmed
-	mainView := m.renderMainView()
-
-	// Render dialog
+	// Render dialog content
 	var dialogContent string
 
 	switch m.activeDialog {
@@ -273,46 +270,15 @@ func (m Model) renderWithDialog() string {
 
 	dialog := m.styles.Dialog.Render(dialogContent)
 
-	// Center the dialog
-	dialogWidth := lipgloss.Width(dialog)
-	dialogHeight := lipgloss.Height(dialog)
-
-	x := (m.width - dialogWidth) / 2
-	y := (m.height - dialogHeight) / 2
-
-	// Overlay dialog on main view
-	return placeOverlay(x, y, dialog, mainView)
+	// Use lipgloss.Place to properly center the dialog
+	// This avoids ANSI escape code issues that cause visual artifacts
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		dialog,
+		lipgloss.WithWhitespaceChars(" "),
+	)
 }
 
-// placeOverlay places an overlay on top of a background at the given position
-func placeOverlay(x, y int, overlay, background string) string {
-	bgLines := strings.Split(background, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	for i, line := range overlayLines {
-		bgY := y + i
-		if bgY < 0 || bgY >= len(bgLines) {
-			continue
-		}
-
-		bgLine := bgLines[bgY]
-		bgRunes := []rune(bgLine)
-
-		// Pad background line if needed
-		for len(bgRunes) < x+len([]rune(line)) {
-			bgRunes = append(bgRunes, ' ')
-		}
-
-		// Replace portion of background with overlay
-		overlayRunes := []rune(line)
-		for j, r := range overlayRunes {
-			if x+j >= 0 && x+j < len(bgRunes) {
-				bgRunes[x+j] = r
-			}
-		}
-
-		bgLines[bgY] = string(bgRunes)
-	}
-
-	return strings.Join(bgLines, "\n")
-}
