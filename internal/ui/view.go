@@ -25,24 +25,48 @@ func (m Model) View() string {
 
 func (m Model) renderMainView() string {
 	// Calculate panel dimensions
+	// Layout: Left column (1/3) | Right column (2/3)
 	availableWidth := m.width - 4 // borders
-	sessionsWidth := availableWidth * 35 / 100
-	windowsWidth := availableWidth * 35 / 100
-	infoWidth := availableWidth - sessionsWidth - windowsWidth
+	leftColumnWidth := availableWidth / 3
+	rightColumnWidth := availableWidth - leftColumnWidth
 
 	panelHeight := m.height - 4 // status bar + help
 
-	// Render panels
-	sessionsPanel := m.renderSessionsPanel(sessionsWidth, panelHeight)
-	windowsPanel := m.renderWindowsPanel(windowsWidth, panelHeight)
-	infoPanel := m.renderInfoPanel(infoWidth, panelHeight)
+	// Left column: Sessions (1/2) and Windows (1/2) stacked vertically
+	sessionsHeight := panelHeight / 2
+	windowsHeight := panelHeight - sessionsHeight
 
-	// Join panels horizontally
-	mainContent := lipgloss.JoinHorizontal(
-		lipgloss.Top,
+	// Right column: Info (3/4) and Logs (1/4) stacked vertically
+	infoHeight := panelHeight * 3 / 4
+	logsHeight := panelHeight - infoHeight
+
+	// Render left column panels
+	sessionsPanel := m.renderSessionsPanel(leftColumnWidth, sessionsHeight)
+	windowsPanel := m.renderWindowsPanel(leftColumnWidth, windowsHeight)
+
+	// Stack left column vertically
+	leftColumn := lipgloss.JoinVertical(
+		lipgloss.Left,
 		sessionsPanel,
 		windowsPanel,
+	)
+
+	// Render right column panels
+	infoPanel := m.renderInfoPanel(rightColumnWidth, infoHeight)
+	logsPanel := m.renderLogsPanel(rightColumnWidth, logsHeight)
+
+	// Stack right column vertically
+	rightColumn := lipgloss.JoinVertical(
+		lipgloss.Left,
 		infoPanel,
+		logsPanel,
+	)
+
+	// Join columns horizontally
+	mainContent := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		leftColumn,
+		rightColumn,
 	)
 
 	// Render status bar
@@ -171,6 +195,21 @@ func (m Model) renderInfoPanel(width, height int) string {
 	}
 
 	innerContent := lipgloss.JoinVertical(lipgloss.Left, title, content.String())
+
+	return style.
+		Width(width).
+		Height(height).
+		Render(innerContent)
+}
+
+func (m Model) renderLogsPanel(width, height int) string {
+	style := m.styles.UnfocusedPanel
+
+	title := m.styles.Title.Render("Logs")
+
+	content := m.styles.DimText.Render("Logs will be displayed here...")
+
+	innerContent := lipgloss.JoinVertical(lipgloss.Left, title, content)
 
 	return style.
 		Width(width).
