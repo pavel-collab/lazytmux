@@ -33,6 +33,20 @@ type WindowDeletedMsg struct {
 	WindowIndex int
 }
 
+// SessionSwitchedMsg signals successful session switch
+type SessionSwitchedMsg struct {
+	Name string
+}
+
+// WindowSwitchedMsg signals successful window switch
+type WindowSwitchedMsg struct {
+	SessionName string
+	WindowName  string
+}
+
+// DetachedMsg signals successful detach from session
+type DetachedMsg struct{}
+
 // ErrorMsg carries error information
 type ErrorMsg struct {
 	Err error
@@ -125,5 +139,38 @@ func DeleteWindowCmd(client *tmux.Client, sessionName string, windowIndex int) t
 			return ErrorMsg{Err: err}
 		}
 		return WindowDeletedMsg{SessionName: sessionName, WindowIndex: windowIndex}
+	}
+}
+
+// SwitchSessionCmd switches to another session
+func SwitchSessionCmd(client *tmux.Client, name string) tea.Cmd {
+	return func() tea.Msg {
+		err := client.SwitchClient(name)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return SessionSwitchedMsg{Name: name}
+	}
+}
+
+// SwitchWindowCmd switches to another window
+func SwitchWindowCmd(client *tmux.Client, sessionName string, windowIndex int, windowName string) tea.Cmd {
+	return func() tea.Msg {
+		err := client.SelectWindow(sessionName, windowIndex)
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return WindowSwitchedMsg{SessionName: sessionName, WindowName: windowName}
+	}
+}
+
+// DetachCmd detaches the current client from its session
+func DetachCmd(client *tmux.Client) tea.Cmd {
+	return func() tea.Msg {
+		err := client.DetachClient()
+		if err != nil {
+			return ErrorMsg{Err: err}
+		}
+		return DetachedMsg{}
 	}
 }

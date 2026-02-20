@@ -63,6 +63,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, RefreshCmd(m.client))
 		return m, tea.Batch(cmds...)
 
+	case SessionSwitchedMsg:
+		cmds = append(cmds, setStatusCmd("Switched to session: "+msg.Name))
+		return m, tea.Batch(cmds...)
+
+	case WindowSwitchedMsg:
+		cmds = append(cmds, setStatusCmd("Switched to window: "+msg.WindowName))
+		return m, tea.Batch(cmds...)
+
+	case DetachedMsg:
+		cmds = append(cmds, setStatusCmd("Detached from session"))
+		cmds = append(cmds, RefreshCmd(m.client))
+		return m, tea.Batch(cmds...)
+
 	case ErrorMsg:
 		m.lastError = msg.Err
 		return m, nil
@@ -132,6 +145,25 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			session := m.tmuxState.Sessions[m.sessionCursor]
 			m.attachCmd = m.client.AttachSession(session.Name)
 			return m, tea.Quit
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keyMap.Detach):
+		// Check if any session is attached
+		for _, s := range m.tmuxState.Sessions {
+			if s.Attached {
+				return m, DetachCmd(m.client)
+			}
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keyMap.Select):
+		if m.focusedPanel == SessionsPanel && len(m.tmuxState.Sessions) > 0 {
+			session := m.tmuxState.Sessions[m.sessionCursor]
+			return m, SwitchSessionCmd(m.client, session.Name)
+		} else if m.focusedPanel == WindowsPanel && len(m.tmuxState.Windows) > 0 && m.tmuxState.CurrentSession != nil {
+			window := m.tmuxState.Windows[m.windowCursor]
+			return m, SwitchWindowCmd(m.client, m.tmuxState.CurrentSession.Name, window.Index, window.Name)
 		}
 		return m, nil
 
