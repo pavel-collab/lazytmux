@@ -11,6 +11,17 @@ type Session struct {
 	Attached bool
 }
 
+// Pane represents a tmux pane within a window
+type Pane struct {
+	ID     string
+	Index  int
+	Width  int
+	Height int
+	Left   int  // X position
+	Top    int  // Y position
+	Active bool
+}
+
 // Window represents a tmux window within a session
 type Window struct {
 	ID          string
@@ -19,6 +30,7 @@ type Window struct {
 	SessionName string
 	Active      bool
 	Panes       int
+	PaneList    []Pane // detailed pane information
 }
 
 // TmuxState holds the complete current state

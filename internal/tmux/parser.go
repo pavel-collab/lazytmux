@@ -63,3 +63,37 @@ func ParseWindows(sessionName, output string) ([]Window, error) {
 	}
 	return windows, nil
 }
+
+// ParsePanes parses `list-panes -F` output
+func ParsePanes(output string) ([]Pane, error) {
+	var panes []Pane
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, ":")
+		if len(parts) < 7 {
+			continue
+		}
+
+		index, _ := strconv.Atoi(parts[1])
+		width, _ := strconv.Atoi(parts[2])
+		height, _ := strconv.Atoi(parts[3])
+		left, _ := strconv.Atoi(parts[4])
+		top, _ := strconv.Atoi(parts[5])
+		active := parts[6] == "1"
+
+		panes = append(panes, Pane{
+			ID:     parts[0],
+			Index:  index,
+			Width:  width,
+			Height: height,
+			Left:   left,
+			Top:    top,
+			Active: active,
+		})
+	}
+	return panes, nil
+}

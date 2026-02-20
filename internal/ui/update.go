@@ -87,6 +87,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ClearStatusMsg:
 		m.statusMessage = ""
 		return m, nil
+
+	case PaneSplitMsg:
+		splitType := "horizontally"
+		if msg.Vertical {
+			splitType = "vertically"
+		}
+		cmds = append(cmds, setStatusCmd("Window split "+splitType))
+		cmds = append(cmds, RefreshCmd(m.client))
+		// Reload panes for the current window
+		cmds = append(cmds, LoadPanesCmd(m.client, msg.SessionName, msg.WindowIndex))
+		return m, tea.Batch(cmds...)
+
+	case PanesLoadedMsg:
+		if msg.Err != nil {
+			m.lastError = msg.Err
+		} else {
+			m.currentPanes = msg.Panes
+		}
+		return m, nil
 	}
 
 	return m, nil
@@ -106,9 +125,9 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keyMap.Tab), key.Matches(msg, m.keyMap.Right):
 		m.focusedPanel = (m.focusedPanel + 1) % 2
-		// Load windows when switching to windows panel
+		// Load windows and panes when switching to windows panel
 		if m.focusedPanel == WindowsPanel && len(m.tmuxState.Sessions) > 0 {
-			return m, m.loadWindowsCmd()
+			return m, tea.Batch(m.loadWindowsCmd(), m.loadPanesCmd())
 		}
 		return m, nil
 
@@ -124,6 +143,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursorUp()
 		if m.focusedPanel == SessionsPanel {
 			return m, m.loadWindowsCmd()
+		} else if m.focusedPanel == WindowsPanel {
+			return m, m.loadPanesCmd()
 		}
 		return m, nil
 
@@ -131,6 +152,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursorDown()
 		if m.focusedPanel == SessionsPanel {
 			return m, m.loadWindowsCmd()
+		} else if m.focusedPanel == WindowsPanel {
+			return m, m.loadPanesCmd()
 		}
 		return m, nil
 
@@ -170,7 +193,21 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keyMap.Enter):
 		if m.focusedPanel == SessionsPanel && len(m.tmuxState.Sessions) > 0 {
 			m.focusedPanel = WindowsPanel
-			return m, m.loadWindowsCmd()
+			return m, tea.Batch(m.loadWindowsCmd(), m.loadPanesCmd())
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keyMap.SplitVertical):
+		if m.focusedPanel == WindowsPanel && len(m.tmuxState.Windows) > 0 && m.tmuxState.CurrentSession != nil {
+			window := m.tmuxState.Windows[m.windowCursor]
+			return m, SplitWindowVerticalCmd(m.client, m.tmuxState.CurrentSession.Name, window.Index)
+		}
+		return m, nil
+
+	case key.Matches(msg, m.keyMap.SplitHorizontal):
+		if m.focusedPanel == WindowsPanel && len(m.tmuxState.Windows) > 0 && m.tmuxState.CurrentSession != nil {
+			window := m.tmuxState.Windows[m.windowCursor]
+			return m, SplitWindowHorizontalCmd(m.client, m.tmuxState.CurrentSession.Name, window.Index)
 		}
 		return m, nil
 	}
@@ -305,6 +342,14 @@ func (m Model) loadWindowsCmd() tea.Cmd {
 		}
 		return TmuxStateMsg{State: state}
 	}
+}
+
+func (m Model) loadPanesCmd() tea.Cmd {
+	if m.tmuxState.CurrentSession == nil || len(m.tmuxState.Windows) == 0 {
+		return nil
+	}
+	window := m.tmuxState.Windows[m.windowCursor]
+	return LoadPanesCmd(m.client, m.tmuxState.CurrentSession.Name, window.Index)
 }
 
 func max(a, b int) int {

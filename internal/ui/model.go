@@ -35,6 +35,7 @@ type Model struct {
 	sessionCursor  int
 	windowCursor   int
 	focusedPanel   FocusedPanel
+	currentPanes   []tmux.Pane // panes of currently selected window
 
 	// Dialog state
 	activeDialog   DialogType
