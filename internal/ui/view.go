@@ -162,7 +162,10 @@ func (m Model) renderInfoPanel(width, height int) string {
 		content.WriteString(fmt.Sprintf("Window: %s\n", w.Name))
 		content.WriteString(fmt.Sprintf("Index: %d\n", w.Index))
 		content.WriteString(fmt.Sprintf("Panes: %d\n", w.Panes))
-		content.WriteString(fmt.Sprintf("Active: %v", w.Active))
+		content.WriteString(fmt.Sprintf("Active: %v\n", w.Active))
+		if m.tmuxState.CurrentSession != nil {
+			content.WriteString(fmt.Sprintf("Session: %s", m.tmuxState.CurrentSession.Name))
+		}
 	} else {
 		content.WriteString(m.styles.DimText.Render("Select an item"))
 	}
