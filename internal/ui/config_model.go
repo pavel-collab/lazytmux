@@ -7,20 +7,39 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// ConfigTab represents the active tab in config editor
+type ConfigTab int
+
+const (
+	OptionsTab ConfigTab = iota
+	PluginsTab
+)
+
 // ConfigEditorModel is the model for the configuration editor
 type ConfigEditorModel struct {
 	config     *config.Config
 	categories []config.Category
+	plugins    []config.Plugin
 
-	// Navigation
+	// Tab navigation
+	activeTab ConfigTab
+
+	// Navigation (Options tab)
 	categoryCursor int  // current category index
 	optionCursor   int  // current option index in category
 	focusOnOptions bool // true = focus on options list, false = on categories
+
+	// Navigation (Plugins tab)
+	pluginCursor        int  // current plugin index
+	pluginSettingCursor int  // current setting index
+	focusOnPluginSettings bool // true = focus on settings, false = on plugin list
 
 	// Editing
 	editing       bool
 	editInput     textinput.Model
 	editingOption *config.Option
+	editingPluginSetting *config.PluginSetting
+	editingPluginRepo    string
 
 	// Choice selection mode (for TypeChoice)
 	choosing     bool
@@ -29,6 +48,9 @@ type ConfigEditorModel struct {
 	// Confirmation dialogs
 	confirmReset bool
 	confirmSave  bool
+
+	// TPM install dialog
+	showTPMInstall bool
 
 	// Dimensions
 	width  int
@@ -46,8 +68,10 @@ func NewConfigEditorModel() ConfigEditorModel {
 
 	return ConfigEditorModel{
 		categories: config.GetCategories(),
+		plugins:    config.GetPlugins(),
 		editInput:  ti,
 		language:   "en",
+		activeTab:  OptionsTab,
 	}
 }
 
@@ -163,4 +187,95 @@ func (m *ConfigEditorModel) resetState() {
 	m.confirmReset = false
 	m.confirmSave = false
 	m.editingOption = nil
+	m.editingPluginSetting = nil
+	m.editingPluginRepo = ""
+	m.showTPMInstall = false
+}
+
+// CurrentPlugin returns the current plugin
+func (m ConfigEditorModel) CurrentPlugin() *config.Plugin {
+	if m.pluginCursor < len(m.plugins) {
+		p := m.plugins[m.pluginCursor]
+		return &p
+	}
+	return nil
+}
+
+// CurrentPluginSetting returns the current plugin setting
+func (m ConfigEditorModel) CurrentPluginSetting() *config.PluginSetting {
+	p := m.CurrentPlugin()
+	if p == nil || m.pluginSettingCursor >= len(p.Settings) {
+		return nil
+	}
+	s := p.Settings[m.pluginSettingCursor]
+	return &s
+}
+
+// IsPluginEnabled returns whether the current plugin is enabled
+func (m ConfigEditorModel) IsPluginEnabled(repo string) bool {
+	if m.config != nil {
+		return m.config.IsPluginEnabled(repo)
+	}
+	return false
+}
+
+// TogglePlugin toggles a plugin on/off
+func (m *ConfigEditorModel) TogglePlugin(repo string) {
+	if m.config != nil {
+		current := m.config.IsPluginEnabled(repo)
+		m.config.SetPluginEnabled(repo, !current)
+	}
+}
+
+// GetPluginSettingValue returns a plugin setting value
+func (m ConfigEditorModel) GetPluginSettingValue(repo, key string) string {
+	if m.config != nil {
+		return m.config.GetPluginSetting(repo, key)
+	}
+	return ""
+}
+
+// SetPluginSettingValue sets a plugin setting value
+func (m *ConfigEditorModel) SetPluginSettingValue(repo, key, value string) {
+	if m.config != nil {
+		m.config.SetPluginSetting(repo, key, value)
+	}
+}
+
+// moveUpPlugins moves cursor up in plugins tab
+func (m *ConfigEditorModel) moveUpPlugins() {
+	if m.focusOnPluginSettings {
+		if m.pluginSettingCursor > 0 {
+			m.pluginSettingCursor--
+		}
+	} else {
+		if m.pluginCursor > 0 {
+			m.pluginCursor--
+			m.pluginSettingCursor = 0
+		}
+	}
+}
+
+// moveDownPlugins moves cursor down in plugins tab
+func (m *ConfigEditorModel) moveDownPlugins() {
+	if m.focusOnPluginSettings {
+		p := m.CurrentPlugin()
+		if p != nil && m.pluginSettingCursor < len(p.Settings)-1 {
+			m.pluginSettingCursor++
+		}
+	} else {
+		if m.pluginCursor < len(m.plugins)-1 {
+			m.pluginCursor++
+			m.pluginSettingCursor = 0
+		}
+	}
+}
+
+// SwitchTab switches between Options and Plugins tabs
+func (m *ConfigEditorModel) SwitchTab() {
+	if m.activeTab == OptionsTab {
+		m.activeTab = PluginsTab
+	} else {
+		m.activeTab = OptionsTab
+	}
 }

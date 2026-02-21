@@ -88,7 +88,21 @@ func (m ConfigEditorModel) handleKeyPress(msg tea.KeyMsg) (ConfigEditorModel, te
 		return m.handleSaveConfirm(msg)
 	}
 
-	// Normal navigation
+	// Handle TPM install dialog
+	if m.showTPMInstall {
+		return m.handleTPMInstallDialog(msg)
+	}
+
+	// Route to appropriate tab handler
+	switch m.activeTab {
+	case PluginsTab:
+		return m.handlePluginsTabKeyPress(msg)
+	default:
+		return m.handleOptionsTabKeyPress(msg)
+	}
+}
+
+func (m ConfigEditorModel) handleOptionsTabKeyPress(msg tea.KeyMsg) (ConfigEditorModel, tea.Cmd) {
 	switch msg.String() {
 	case "q", "esc":
 		if m.HasChanges() {
@@ -143,8 +157,184 @@ func (m ConfigEditorModel) handleKeyPress(msg tea.KeyMsg) (ConfigEditorModel, te
 	case "L":
 		// Toggle language
 		m.ToggleLanguage()
+
+	case "1":
+		// Stay on Options tab
+		m.activeTab = OptionsTab
+
+	case "2":
+		// Switch to Plugins tab
+		m.activeTab = PluginsTab
+
+	case "p":
+		// Switch to Plugins tab
+		m.activeTab = PluginsTab
 	}
 
+	return m, nil
+}
+
+func (m ConfigEditorModel) handlePluginsTabKeyPress(msg tea.KeyMsg) (ConfigEditorModel, tea.Cmd) {
+	switch msg.String() {
+	case "q", "esc":
+		if m.HasChanges() {
+			m.confirmSave = true
+			return m, nil
+		}
+		return m, ExitConfigEditorCmd()
+
+	case "j", "down":
+		m.moveDownPlugins()
+
+	case "k", "up":
+		m.moveUpPlugins()
+
+	case "h", "left":
+		if m.focusOnPluginSettings {
+			m.focusOnPluginSettings = false
+		}
+
+	case "l", "right":
+		p := m.CurrentPlugin()
+		if p != nil && len(p.Settings) > 0 && m.IsPluginEnabled(p.Repo) {
+			m.focusOnPluginSettings = true
+		}
+
+	case "tab":
+		p := m.CurrentPlugin()
+		if p != nil && len(p.Settings) > 0 && m.IsPluginEnabled(p.Repo) {
+			m.focusOnPluginSettings = !m.focusOnPluginSettings
+		}
+
+	case " ", "enter":
+		if m.focusOnPluginSettings {
+			return m.startPluginSettingEditing()
+		} else {
+			return m.toggleCurrentPlugin()
+		}
+
+	case "s", "ctrl+s":
+		// Save
+		if m.config != nil && m.HasChanges() {
+			return m, SaveConfigCmd(m.config)
+		}
+
+	case "r":
+		// Reset to defaults
+		m.confirmReset = true
+
+	case "L":
+		// Toggle language
+		m.ToggleLanguage()
+
+	case "1":
+		// Switch to Options tab
+		m.activeTab = OptionsTab
+
+	case "2":
+		// Stay on Plugins tab
+		m.activeTab = PluginsTab
+
+	case "o":
+		// Switch to Options tab
+		m.activeTab = OptionsTab
+
+	case "?":
+		// Show TPM install instructions
+		m.showTPMInstall = true
+	}
+
+	return m, nil
+}
+
+func (m ConfigEditorModel) toggleCurrentPlugin() (ConfigEditorModel, tea.Cmd) {
+	p := m.CurrentPlugin()
+	if p == nil {
+		return m, nil
+	}
+
+	// TPM must be enabled first if enabling other plugins
+	if p.Repo != "tmux-plugins/tpm" && !m.IsPluginEnabled("tmux-plugins/tpm") {
+		// Auto-enable TPM when enabling any plugin
+		m.TogglePlugin("tmux-plugins/tpm")
+	}
+
+	m.TogglePlugin(p.Repo)
+
+	// When disabling a plugin, also disable plugins that require it
+	if !m.IsPluginEnabled(p.Repo) {
+		for _, plugin := range m.plugins {
+			for _, req := range plugin.Requires {
+				if req == p.Repo && m.IsPluginEnabled(plugin.Repo) {
+					m.TogglePlugin(plugin.Repo)
+				}
+			}
+		}
+	}
+
+	// When enabling a plugin, also enable required plugins
+	if m.IsPluginEnabled(p.Repo) {
+		for _, req := range p.Requires {
+			if !m.IsPluginEnabled(req) {
+				m.TogglePlugin(req)
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (m ConfigEditorModel) startPluginSettingEditing() (ConfigEditorModel, tea.Cmd) {
+	p := m.CurrentPlugin()
+	if p == nil || !m.IsPluginEnabled(p.Repo) {
+		return m, nil
+	}
+
+	setting := m.CurrentPluginSetting()
+	if setting == nil {
+		return m, nil
+	}
+
+	switch setting.Type {
+	case config.TypeBool:
+		// Toggle boolean setting
+		current := m.GetPluginSettingValue(p.Repo, setting.Key)
+		newValue := "on"
+		if current == "on" {
+			newValue = "off"
+		}
+		m.SetPluginSettingValue(p.Repo, setting.Key, newValue)
+
+	case config.TypeChoice:
+		m.choosing = true
+		m.editingPluginSetting = setting
+		m.editingPluginRepo = p.Repo
+		currentVal := m.GetPluginSettingValue(p.Repo, setting.Key)
+		m.choiceCursor = 0
+		for i, choice := range setting.Choices {
+			if choice == currentVal {
+				m.choiceCursor = i
+				break
+			}
+		}
+
+	default:
+		m.editing = true
+		m.editingPluginSetting = setting
+		m.editingPluginRepo = p.Repo
+		m.editInput.SetValue(m.GetPluginSettingValue(p.Repo, setting.Key))
+		m.editInput.Focus()
+		return m, textinput.Blink
+	}
+
+	return m, nil
+}
+
+func (m ConfigEditorModel) handleTPMInstallDialog(msg tea.KeyMsg) (ConfigEditorModel, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q", "enter", " ":
+		m.showTPMInstall = false
+	}
 	return m, nil
 }
 
@@ -198,6 +388,35 @@ func (m ConfigEditorModel) toggleBool() (ConfigEditorModel, tea.Cmd) {
 }
 
 func (m ConfigEditorModel) handleChoiceSelection(msg tea.KeyMsg) (ConfigEditorModel, tea.Cmd) {
+	// Handle plugin setting choice
+	if m.editingPluginSetting != nil {
+		choices := m.editingPluginSetting.Choices
+
+		switch msg.String() {
+		case "j", "down":
+			if m.choiceCursor < len(choices)-1 {
+				m.choiceCursor++
+			}
+		case "k", "up":
+			if m.choiceCursor > 0 {
+				m.choiceCursor--
+			}
+		case "enter", " ":
+			if m.choiceCursor < len(choices) {
+				m.SetPluginSettingValue(m.editingPluginRepo, m.editingPluginSetting.Key, choices[m.choiceCursor])
+			}
+			m.choosing = false
+			m.editingPluginSetting = nil
+			m.editingPluginRepo = ""
+		case "esc", "q":
+			m.choosing = false
+			m.editingPluginSetting = nil
+			m.editingPluginRepo = ""
+		}
+		return m, nil
+	}
+
+	// Handle regular option choice
 	opt := m.CurrentOption()
 	if opt == nil {
 		m.choosing = false
@@ -228,9 +447,28 @@ func (m ConfigEditorModel) handleChoiceSelection(msg tea.KeyMsg) (ConfigEditorMo
 func (m ConfigEditorModel) handleTextInput(msg tea.KeyMsg) (ConfigEditorModel, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
-		if m.editingOption != nil {
-			value := m.editInput.Value()
+		value := m.editInput.Value()
 
+		// Handle plugin setting
+		if m.editingPluginSetting != nil {
+			// Validate numbers for plugin settings
+			if m.editingPluginSetting.Type == config.TypeNumber {
+				_, err := strconv.Atoi(value)
+				if err != nil {
+					// Invalid number, keep editing
+					return m, nil
+				}
+			}
+			m.SetPluginSettingValue(m.editingPluginRepo, m.editingPluginSetting.Key, value)
+			m.editing = false
+			m.editingPluginSetting = nil
+			m.editingPluginRepo = ""
+			m.editInput.Blur()
+			return m, nil
+		}
+
+		// Handle regular option
+		if m.editingOption != nil {
 			// Validate numbers
 			if m.editingOption.Type == config.TypeNumber {
 				num, err := strconv.Atoi(value)
@@ -255,6 +493,8 @@ func (m ConfigEditorModel) handleTextInput(msg tea.KeyMsg) (ConfigEditorModel, t
 	case tea.KeyEsc:
 		m.editing = false
 		m.editingOption = nil
+		m.editingPluginSetting = nil
+		m.editingPluginRepo = ""
 		m.editInput.Blur()
 		return m, nil
 	}

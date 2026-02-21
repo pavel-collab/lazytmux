@@ -13,28 +13,84 @@ func SaveConfig(cfg *Config) error {
 
 	// Track which keys we've updated in existing lines
 	processedKeys := make(map[string]bool)
+	processedPlugins := make(map[string]bool)
+	processedPluginSettings := make(map[string]bool)
 
 	// Patterns to match existing set commands
 	setOptionRe := regexp.MustCompile(`^(set(?:-option)?\s+(?:-[sg]\s+)?(?:-[sg]\s+)?)(\S+)(\s+)(.+)$`)
 	setWindowRe := regexp.MustCompile(`^(setw(?:-window-option)?\s+(?:-g\s+)?)(\S+)(\s+)(.+)$`)
+	pluginRe := regexp.MustCompile(`^set\s+(?:-g\s+)?@plugin\s+['"]?([^'"]+)['"]?$`)
+	pluginSettingRe := regexp.MustCompile(`^(set\s+(?:-g\s+)?)(@[a-zA-Z0-9_-]+)(\s+)['"]?([^'"]+)['"]?$`)
+	tpmRunRe := regexp.MustCompile(`^run\s+['"]?.*tpm/tpm['"]?$`)
 
-	// Update existing lines
-	updatedLines := make([]string, len(cfg.RawLines))
-	copy(updatedLines, cfg.RawLines)
+	// Process lines - we'll rebuild the file
+	var resultLines []string
+	var tpmRunLine string
+	hasTPMRun := false
 
-	for i, line := range updatedLines {
+	for _, line := range cfg.RawLines {
 		trimmed := strings.TrimSpace(line)
 
-		// Skip empty lines, comments, and plugin lines
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") || isPluginLine(trimmed) {
+		// Preserve empty lines and comments
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			resultLines = append(resultLines, line)
 			continue
 		}
 
+		// Handle @plugin lines
+		if match := pluginRe.FindStringSubmatch(trimmed); match != nil {
+			repo := match[1]
+			processedPlugins[repo] = true
+			// Only keep if still enabled
+			if state, ok := cfg.Plugins[repo]; ok && state.Enabled {
+				resultLines = append(resultLines, line)
+			}
+			continue
+		}
+
+		// Handle plugin settings (@setting)
+		if match := pluginSettingRe.FindStringSubmatch(trimmed); match != nil {
+			settingKey := match[2]
+			processedPluginSettings[settingKey] = true
+			// Find the plugin and update the value
+			settingHandled := false
+			for _, p := range GetPlugins() {
+				if state, ok := cfg.Plugins[p.Repo]; ok && state.Enabled {
+					for _, s := range p.Settings {
+						if s.Key == settingKey {
+							newValue := cfg.GetPluginSetting(p.Repo, settingKey)
+							settingLine := match[1] + settingKey + match[3] + formatPluginValue(newValue)
+							resultLines = append(resultLines, settingLine)
+							settingHandled = true
+							break
+						}
+					}
+				}
+				if settingHandled {
+					break
+				}
+			}
+			// If plugin is disabled or setting not found, skip this line
+			continue
+		}
+
+		// Track TPM run line (should be at the end)
+		if tpmRunRe.MatchString(trimmed) {
+			tpmRunLine = line
+			hasTPMRun = true
+			continue // Don't add yet, we'll add at the end
+		}
+
+		// Handle regular options
 		var key string
 		var newLine string
 
 		if match := setOptionRe.FindStringSubmatch(trimmed); match != nil {
 			key = match[2]
+			// Skip if it's a plugin-related line we already handled
+			if strings.HasPrefix(key, "@") {
+				continue
+			}
 			if val, ok := cfg.Values[key]; ok && val.Modified {
 				if _, known := allOpts[key]; known {
 					newLine = match[1] + key + match[3] + val.Value
@@ -50,22 +106,18 @@ func SaveConfig(cfg *Config) error {
 		}
 
 		if newLine != "" {
-			// Preserve leading whitespace from original line
-			leadingSpace := ""
-			for _, ch := range line {
-				if ch == ' ' || ch == '\t' {
-					leadingSpace += string(ch)
-				} else {
-					break
-				}
-			}
-			updatedLines[i] = leadingSpace + newLine
+			resultLines = append(resultLines, newLine)
 			processedKeys[key] = true
+		} else {
+			resultLines = append(resultLines, line)
+			if key != "" {
+				processedKeys[key] = true
+			}
 		}
 	}
 
-	// Collect new lines that weren't in the original file
-	var newLines []string
+	// Collect new options that weren't in the original file
+	var newOptionLines []string
 	for key, val := range cfg.Values {
 		if val.Modified && !processedKeys[key] {
 			if opt, known := allOpts[key]; known {
@@ -78,7 +130,30 @@ func SaveConfig(cfg *Config) error {
 				default:
 					line = fmt.Sprintf("set -g %s %s", key, val.Value)
 				}
-				newLines = append(newLines, line)
+				newOptionLines = append(newOptionLines, line)
+			}
+		}
+	}
+
+	// Collect new plugins that weren't in the original file
+	var newPluginLines []string
+	var newPluginSettingLines []string
+	for repo, state := range cfg.Plugins {
+		if state.Enabled && !processedPlugins[repo] {
+			newPluginLines = append(newPluginLines, fmt.Sprintf("set -g @plugin '%s'", repo))
+		}
+		// Add new plugin settings
+		if state.Enabled {
+			if plugin, ok := GetPlugin(repo); ok {
+				for _, s := range plugin.Settings {
+					if !processedPluginSettings[s.Key] {
+						value := cfg.GetPluginSetting(repo, s.Key)
+						if value != s.Default { // Only add non-default settings
+							newPluginSettingLines = append(newPluginSettingLines,
+								fmt.Sprintf("set -g %s '%s'", s.Key, value))
+						}
+					}
+				}
 			}
 		}
 	}
@@ -86,35 +161,83 @@ func SaveConfig(cfg *Config) error {
 	// Build final content
 	var content strings.Builder
 
-	for _, line := range updatedLines {
+	// Write existing lines
+	for _, line := range resultLines {
 		content.WriteString(line)
 		content.WriteString("\n")
 	}
 
-	// Add new options at the end
-	if len(newLines) > 0 {
-		// Add a marker comment if the file had content
-		if len(updatedLines) > 0 {
+	// Add new options
+	if len(newOptionLines) > 0 {
+		if len(resultLines) > 0 {
 			content.WriteString("\n# Added by lazytmux\n")
 		}
-		for _, line := range newLines {
+		for _, line := range newOptionLines {
 			content.WriteString(line)
+			content.WriteString("\n")
+		}
+	}
+
+	// Add new plugins
+	if len(newPluginLines) > 0 {
+		content.WriteString("\n# Plugins (managed by lazytmux)\n")
+		for _, line := range newPluginLines {
+			content.WriteString(line)
+			content.WriteString("\n")
+		}
+	}
+
+	// Add new plugin settings
+	if len(newPluginSettingLines) > 0 {
+		content.WriteString("\n# Plugin settings\n")
+		for _, line := range newPluginSettingLines {
+			content.WriteString(line)
+			content.WriteString("\n")
+		}
+	}
+
+	// Always add TPM run line at the end if any plugin is enabled
+	hasEnabledPlugins := false
+	for _, state := range cfg.Plugins {
+		if state.Enabled {
+			hasEnabledPlugins = true
+			break
+		}
+	}
+
+	if hasEnabledPlugins {
+		if !hasTPMRun {
+			content.WriteString("\n# Initialize TMUX plugin manager (keep this line at the very bottom)\n")
+			content.WriteString("run '~/.tmux/plugins/tpm/tpm'\n")
+		} else {
+			content.WriteString("\n")
+			content.WriteString(tpmRunLine)
 			content.WriteString("\n")
 		}
 	}
 
 	// Handle empty file case
-	if len(updatedLines) == 0 && len(newLines) > 0 {
+	finalContent := content.String()
+	if strings.TrimSpace(finalContent) == "" && (len(newOptionLines) > 0 || len(newPluginLines) > 0) {
 		content.Reset()
 		content.WriteString("# tmux configuration - edited by lazytmux\n\n")
-		for _, line := range newLines {
+		for _, line := range newOptionLines {
 			content.WriteString(line)
 			content.WriteString("\n")
 		}
+		finalContent = content.String()
 	}
 
 	// Write to file
-	return os.WriteFile(cfg.FilePath, []byte(content.String()), 0644)
+	return os.WriteFile(cfg.FilePath, []byte(finalContent), 0644)
+}
+
+// formatPluginValue formats a plugin setting value
+func formatPluginValue(value string) string {
+	if strings.Contains(value, " ") || strings.Contains(value, "#") {
+		return fmt.Sprintf("'%s'", value)
+	}
+	return value
 }
 
 // GenerateConfigLine generates a config line for an option

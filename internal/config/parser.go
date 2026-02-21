@@ -36,6 +36,10 @@ func LoadConfig(path string) (*Config, error) {
 	// Match: setw [-window-option] [-g] option value
 	setOptionRe := regexp.MustCompile(`^set(?:-option)?\s+(?:-[sg]\s+)?(-[sg]\s+)?(\S+)\s+(.+)$`)
 	setWindowRe := regexp.MustCompile(`^setw(?:-window-option)?\s+(?:-g\s+)?(\S+)\s+(.+)$`)
+	// Match: set -g @plugin 'user/repo'
+	pluginRe := regexp.MustCompile(`^set\s+(?:-g\s+)?@plugin\s+['"]?([^'"]+)['"]?$`)
+	// Match: set -g @setting 'value' (plugin settings)
+	pluginSettingRe := regexp.MustCompile(`^set\s+(?:-g\s+)?(@[a-zA-Z0-9_-]+)\s+['"]?([^'"]+)['"]?$`)
 
 	allOpts := GetAllOptions()
 
@@ -51,7 +55,41 @@ func LoadConfig(path string) (*Config, error) {
 			continue
 		}
 
-		// Skip plugin lines (run-shell, @plugin)
+		// Parse plugin declarations
+		if match := pluginRe.FindStringSubmatch(trimmed); match != nil {
+			repo := match[1]
+			cfg.PluginLines = append(cfg.PluginLines, repo)
+			// Enable the plugin if it's in our list
+			if _, known := GetPlugin(repo); known {
+				cfg.SetPluginEnabled(repo, true)
+			} else {
+				// Unknown plugin, still track it
+				cfg.Plugins[repo] = &PluginState{
+					Repo:     repo,
+					Enabled:  true,
+					Settings: make(map[string]string),
+				}
+			}
+			continue
+		}
+
+		// Parse plugin settings (@setting)
+		if match := pluginSettingRe.FindStringSubmatch(trimmed); match != nil {
+			key := match[1]
+			value := cleanValue(match[2])
+			// Find which plugin this setting belongs to
+			for _, p := range GetPlugins() {
+				for _, s := range p.Settings {
+					if s.Key == key {
+						cfg.SetPluginSetting(p.Repo, key, value)
+						break
+					}
+				}
+			}
+			continue
+		}
+
+		// Skip other plugin lines (run-shell, etc.)
 		if isPluginLine(trimmed) {
 			continue
 		}
