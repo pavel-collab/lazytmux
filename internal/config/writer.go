@@ -225,6 +225,24 @@ func SaveConfig(cfg *Config) error {
 			content.WriteString(line)
 			content.WriteString("\n")
 		}
+		if len(newPluginLines) > 0 {
+			content.WriteString("\n# Plugins (managed by lazytmux)\n")
+			for _, line := range newPluginLines {
+				content.WriteString(line)
+				content.WriteString("\n")
+			}
+		}
+		if len(newPluginSettingLines) > 0 {
+			content.WriteString("\n# Plugin settings\n")
+			for _, line := range newPluginSettingLines {
+				content.WriteString(line)
+				content.WriteString("\n")
+			}
+		}
+		if hasEnabledPlugins {
+			content.WriteString("\n# Initialize TMUX plugin manager (keep this line at the very bottom)\n")
+			content.WriteString("run '~/.tmux/plugins/tpm/tpm'\n")
+		}
 		finalContent = content.String()
 	}
 

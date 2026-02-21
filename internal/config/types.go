@@ -119,7 +119,8 @@ func (c *Config) HasChanges() bool {
 			return true
 		}
 	}
-	return false
+	// Also check plugin changes
+	return c.HasPluginChanges()
 }
 
 // ResetToDefaults resets all options to their default values
@@ -201,6 +202,22 @@ func (c *Config) HasPluginChanges() bool {
 
 // containsPluginRepo checks if a line contains the plugin repo
 func containsPluginRepo(line, repo string) bool {
-	return len(line) > 0 && (len(repo) > 0 && (line == repo ||
-		(len(line) > len(repo) && line[len(line)-len(repo):] == repo)))
+	return line == repo
+}
+
+// ClearModifiedFlags resets all modified flags after successful save
+func (c *Config) ClearModifiedFlags() {
+	// Clear option modified flags
+	for key, val := range c.Values {
+		val.Modified = false
+		c.Values[key] = val
+	}
+
+	// Update PluginLines to reflect current state
+	c.PluginLines = []string{}
+	for repo, state := range c.Plugins {
+		if state.Enabled {
+			c.PluginLines = append(c.PluginLines, repo)
+		}
+	}
 }

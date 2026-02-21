@@ -58,6 +58,10 @@ type ConfigEditorModel struct {
 
 	// Language (ru/en)
 	language string
+
+	// Status message (shown after save)
+	statusMessage string
+	statusIsError bool
 }
 
 // NewConfigEditorModel creates a new config editor model

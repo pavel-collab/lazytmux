@@ -79,6 +79,18 @@ var (
 
 	tabBarStyle = lipgloss.NewStyle().
 			MarginBottom(1)
+
+	statusSuccessStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("42")).
+				Foreground(lipgloss.Color("230")).
+				Bold(true).
+				Padding(0, 2)
+
+	statusErrorStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("196")).
+				Foreground(lipgloss.Color("230")).
+				Bold(true).
+				Padding(0, 2)
 )
 
 // View renders the config editor
@@ -106,6 +118,19 @@ func (m ConfigEditorModel) View() string {
 
 	// Title and tabs
 	title := configTitleStyle.Render("tmux Configuration Editor")
+
+	// Add status message next to title if present
+	if m.statusMessage != "" {
+		var statusStyle lipgloss.Style
+		if m.statusIsError {
+			statusStyle = statusErrorStyle
+		} else {
+			statusStyle = statusSuccessStyle
+		}
+		statusMsg := statusStyle.Render(m.statusMessage)
+		title = lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", statusMsg)
+	}
+
 	tabs := m.renderTabs()
 
 	// Calculate dimensions

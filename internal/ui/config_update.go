@@ -50,11 +50,28 @@ func ExitConfigEditorCmd() tea.Cmd {
 func (m ConfigEditorModel) Update(msg tea.Msg) (ConfigEditorModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Clear status message on any key press
+		m.statusMessage = ""
+		m.statusIsError = false
 		return m.handleKeyPress(msg)
 
 	case ConfigLoadedMsg:
 		if msg.Err == nil && msg.Config != nil {
 			m.config = msg.Config
+		}
+		return m, nil
+
+	case ConfigSavedMsg:
+		if msg.Err != nil {
+			m.statusMessage = "Error saving: " + msg.Err.Error()
+			m.statusIsError = true
+		} else {
+			m.statusMessage = "Configuration saved!"
+			m.statusIsError = false
+			// Reset modified flags after successful save
+			if m.config != nil {
+				m.config.ClearModifiedFlags()
+			}
 		}
 		return m, nil
 
