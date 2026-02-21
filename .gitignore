@@ -1,5 +1,4 @@
 # Binaries
-lazytmux
 bin/
 *.exe
 *.exe~
