@@ -23,6 +23,7 @@ type KeyMap struct {
 	Detach          key.Binding
 	SplitVertical   key.Binding
 	SplitHorizontal key.Binding
+	OpenConfig      key.Binding
 
 	// General
 	Help    key.Binding
@@ -98,6 +99,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("s"),
 			key.WithHelp("s", "hsplit"),
 		),
+		OpenConfig: key.NewBinding(
+			key.WithKeys("c"),
+			key.WithHelp("c", "config"),
+		),
 		Help: key.NewBinding(
 			key.WithKeys("?"),
 			key.WithHelp("?", "help"),
@@ -128,6 +133,6 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.Left, k.Right},
 		{k.Select, k.Create, k.Delete, k.Rename},
 		{k.SplitVertical, k.SplitHorizontal, k.Attach, k.Detach},
-		{k.Refresh, k.Help, k.Quit},
+		{k.OpenConfig, k.Refresh, k.Help, k.Quit},
 	}
 }

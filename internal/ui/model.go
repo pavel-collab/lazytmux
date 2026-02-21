@@ -49,6 +49,10 @@ type Model struct {
 	styles     Styles
 	showHelp   bool
 
+	// Config editor
+	configEditorActive bool
+	configEditor       ConfigEditorModel
+
 	// Dimensions
 	width  int
 	height int
@@ -78,6 +82,7 @@ func NewModel(client *tmux.Client) Model {
 		keyMap:       DefaultKeyMap(),
 		styles:       DefaultStyles(),
 		dialogInput:  ti,
+		configEditor: NewConfigEditorModel(),
 	}
 }
 
